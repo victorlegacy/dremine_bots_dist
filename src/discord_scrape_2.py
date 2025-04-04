@@ -28,6 +28,7 @@ options.add_argument(r"--user-data-dir=C:\\Users\\okoro\\AppData\\Local\\Google\
 options.add_argument('--profile-directory=Default')
 
 driver = uc.Chrome(options=options)
+driver.delete_all_cookies()
 # === FUNCTIONS ===
 
 def human_delay(min_sec=2.5, max_sec=5.5):
@@ -142,19 +143,19 @@ def scrape_members_panel():
         for index, member in enumerate(members[:MAX_MEMBERS_PER_SERVER]):
             try:
                 ActionChains(driver).move_to_element(member).perform()
-                time.sleep(2)
+                human_delay()
                 member.click()
-                time.sleep(2)
+                human_delay()
 
                 # Small modal appears, now locate Options button
                 options_button = driver.find_element(By.XPATH, '//button[contains(@class, "button_fb7f94")]')
                 options_button.click()
-                time.sleep(2)
+                human_delay()
 
                 # Click "View Full Profile"
                 view_profile_option = driver.find_element(By.XPATH, '//*[@id="user-profile-overflow-menu-view-profile"]')
                 view_profile_option.click()
-                time.sleep(2)
+                human_delay()
 
                 # Extract details from the full profile modal
                 username_elem = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[2]/div/div/div/div/div[2]/div[1]/div[2]/div[1]/span[1]')
@@ -169,7 +170,7 @@ def scrape_members_panel():
                 # Click backdrop to close modal
                 backdrop = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[1]')
                 backdrop.click()
-                time.sleep(2)
+                human_delay()
 
             except Exception as e:
                 print(f" Error extracting member {index+1}: {e}")
@@ -207,7 +208,7 @@ def save_members_to_csv(server_name, server_url, member_list):
 # === MAIN PROCESS ===
 try:
     driver.get("https://discord.com/channels/@me")
-    time.sleep(DELAY_BETWEEN_ACTIONS * 2)
+    human_delay()
 
     servers = get_channel_links() # Replace with real server IDs
 
