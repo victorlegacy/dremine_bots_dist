@@ -2,8 +2,11 @@ import time
 import csv
 import re
 import random
+import traceback
 import undetected_chromedriver as uc
 from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
@@ -28,7 +31,7 @@ options.add_argument(r"--user-data-dir=C:\\Users\\okoro\\AppData\\Local\\Google\
 options.add_argument('--profile-directory=Default')
 
 driver = uc.Chrome(options=options)
-driver.delete_all_cookies()
+# driver.delete_all_cookies()
 # === FUNCTIONS ===
 
 def human_delay(min_sec=2.5, max_sec=5.5):
@@ -129,55 +132,97 @@ def scrape_members_list():
         print(" No dedicated Members List button found. Trying Members Panel...")
         return []
 
+
 def scrape_members_panel():
     """Scrape members from the Members Panel when the Members List button isn't available."""
     print(" Checking for Members Panel...")
     try:
         members_panel = driver.find_element(By.CSS_SELECTOR, 'div[role="list"][aria-label="Members"].content__99f8c')
-
         members = members_panel.find_elements(By.XPATH, '//*[contains(@class, "clickable__91a9d")]')
 
         print(f" Found {len(members)} members in the panel.")
-
         extracted_members = []
+
         for index, member in enumerate(members[:MAX_MEMBERS_PER_SERVER]):
+            print(f" Processing member {index+1}...")
             try:
+                # Scroll into view and click the member
                 ActionChains(driver).move_to_element(member).perform()
-                human_delay()
-                member.click()
-                human_delay()
+                human_delay(0.6, 1.4)
 
-                # Small modal appears, now locate Options button
-                options_button = driver.find_element(By.XPATH, '//button[contains(@class, "button_fb7f94")]')
-                options_button.click()
-                human_delay()
+                driver.execute_script("arguments[0].scrollIntoView(true);", member)
+                human_delay(0.6, 1.4)
 
-                # Click "View Full Profile"
-                view_profile_option = driver.find_element(By.XPATH, '//*[@id="user-profile-overflow-menu-view-profile"]')
-                view_profile_option.click()
-                human_delay()
+                try:
+                    member.click()
+                except:
+                    driver.execute_script("arguments[0].click();", member)
+                human_delay(1.5, 2.5)
 
-                # Extract details from the full profile modal
-                username_elem = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[2]/div/div/div/div/div[2]/div[1]/div[2]/div[1]/span[1]')
-                username = username_elem.text.strip()
+                # === Click "More" (three dots) button ===
+                try:
+                    options_button = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, '//button[@aria-label="More" and @type="button"]'))
+                    )
+                    driver.execute_script("arguments[0].scrollIntoView(true);", options_button)
+                    human_delay(0.5, 1.2)
 
-                joined_elem = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[2]/div/div/div/div/div[2]/div[2]/div/div[2]/section[2]/div[2]/div[3]/div[2]')
-                joined_date = format_date(joined_elem.text.strip())
+                    try:
+                        options_button.click()
+                    except:
+                        driver.execute_script("arguments[0].click();", options_button)
 
-                print(f" {index+1}. {username} - {joined_date}")
-                extracted_members.append((username, joined_date))
+                    human_delay(1.2, 1.8)
+                except Exception as e:
+                    print(f" ❌ Failed to click More button for member {index+1}: {e}")
+                    continue
 
-                # Click backdrop to close modal
-                backdrop = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[1]')
-                backdrop.click()
-                human_delay()
+                # === Click "View Full Profile" ===
+                try:
+                    view_profile_btn = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.XPATH, '//div[@id="user-profile-overflow-menu-view-profile"]'))
+                    )
+                    view_profile_btn.click()
+                    human_delay(2.0, 3.0)
+                except Exception as e:
+                    print(f" ❌ Failed to click 'View Full Profile' for member {index+1}: {e}")
+                    continue
+
+                # === Extract username & join date ===
+                try:
+                    username_elem = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[2]/div/div/div/div/div[2]/div[1]/div[2]/div[1]/span[1]')
+                    username = username_elem.text.strip()
+
+                    joined_elem = driver.find_element(By.XPATH, '//*[@id="app-mount"]/div[2]/div[1]/div[4]/div[2]/div/div/div/div/div[2]/div[2]/div/div[2]/section[2]/div[2]/div[3]/div[2]')
+                    joined_date = format_date(joined_elem.text.strip())
+
+                    print(f" ✅ {index+1}. {username} - {joined_date}")
+                    extracted_members.append((username, joined_date))
+                except Exception as e:
+                    print(f" ⚠️ Could not extract profile info for member {index+1}: {e}")
+                    continue
+
+                # === Close the modal ===
+                 # === Close the modal (with ESC key) ===
+                try:
+                    body = driver.find_element(By.TAG_NAME, 'body')
+                    body.send_keys(Keys.ESCAPE)
+                    human_delay(1.0, 2.0)
+                except Exception as e:
+                    print(f" ⚠️ Could not close modal for member {index+1}: {e}")
 
             except Exception as e:
-                print(f" Error extracting member {index+1}: {e}")
+                print(f" ❌ Error extracting member {index+1}: {e}")
 
         return extracted_members
     except Exception as e:
         print(f" Members Panel not found: {e}")
+        return []
+
+
+    except Exception as e:
+        print(f" Members Panel not found: {e}")
+        traceback.print_exc()
         return []
 
 def format_date(raw_date):
@@ -234,5 +279,6 @@ except Exception as e:
     print(f" Critical error: {e}")
 
 finally:
+    driver.delete_all_cookies()
     driver.quit()
     print(" Browser closed.")
